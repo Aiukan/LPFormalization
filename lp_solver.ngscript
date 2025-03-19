@@ -1,0 +1,193 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "IJulia 1.9.3",
+      "language": "julia",
+      "name": "ijulia-1.9"
+    },
+    "language_info": {
+      "file_extension": ".jl",
+      "name": "julia",
+      "version": "1.9.3"
+    },
+    "engee": {}
+  },
+  "cells": [
+    {
+      "id": "0870f43c",
+      "cell_type": "code",
+      "source": [
+        "data = \"[Количество рикш, Количество повозок с быками]\r\n[Integer, Integer]\r\n[60, 32, Maximize]\r\n[15, 17, 210]\r\n[1, -1, 0]\r\n[-1, 0, 0]\r\n[0, -1, 0]\"\r\ndata = replace(replace(data, \"[\" => \"\"), \"]\" => \"\")\r\ndata_list = split(data, \"\\n\")\r\nvariables = split(data_list[1], \", \")\r\ninteger_vars = map((var_int) -> var_int == \"Integer\", split(data_list[2], \", \"))\r\nobjectives = split(data_list[3], \", \")\r\nobjective_vals = parse.(Float64, objectives[1:length(objectives) - 1])\r\nif objectives[length(objectives)] == \"Maximize\"\r\n    objective_max = true\r\nelse\r\n    objective_max = false\r\nend\r\n\r\nconstraints = map((cond) -> parse.(Float64, split(cond, \", \")), data_list[4:length(data_list)])"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "4-element Vector{Vector{Float64}}:\n [15.0, 17.0, 210.0]\n [1.0, -1.0, 0.0]\n [-1.0, 0.0, 0.0]\n [0.0, -1.0, 0.0]"
+          },
+          "metadata": {},
+          "execution_count": 32
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "07d74c33",
+      "cell_type": "code",
+      "source": [
+        "import Pkg; \r\nPkg.add(\"JuMP\");\r\nPkg.add(\"GLPK\");\r\nusing JuMP, GLPK;"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[32m\u001b[1m   Resolving\u001b[22m\u001b[39m package versions...\n\u001b[32m\u001b[1m  No Changes\u001b[22m\u001b[39m to `~/.project/Project.toml`\n\u001b[32m\u001b[1m  No Changes\u001b[22m\u001b[39m to `~/.project/Manifest.toml`\n\u001b[33m\u001b[1m┌ \u001b[22m\u001b[39m\u001b[33m\u001b[1mWarning: \u001b[22m\u001b[39mCircular dependency detected. Precompilation will be skipped for:\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlibFFTWExt [96386cae-6b62-59ad-b532-a94eae05753e]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesCUDAExt [75b8c125-561c-596e-9db0-c79879254aa3]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  SparseArraysExt [85068d23-b5fb-53f1-8204-05c2aba6942f]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesRecursiveArrayToolsExt [c6a149b2-afdf-53b0-83bb-237b19d30693]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesGPUArraysExt [b7a43d79-68b1-555e-8052-5fba48570bb1]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  AtomixCUDAExt [13011619-4c7c-5ef0-948f-5fc81565cd05]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesZygoteExt [37b8f99f-6f97-57a3-b9f9-a4dd545e3a97]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlibForwardDiffExt [e8958739-db86-5f80-9e4c-f7c96aa15038]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  SpecialFunctionsExt [1285c0f1-ff9f-5867-b66e-0f359bcf09ba]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesSparseArraysExt [f6db14ba-fd63-5072-9bce-a2c470f90ca4]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesMLUtilsExt [ebee3dfe-b9aa-5535-b9a3-b63281c92313]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  LinearAlgebraExt [66d79d19-2cc4-5b0b-ac7a-b340256d1ecd]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlibCUDAExt [8a688d86-d2bc-5ad3-8ed1-384f9f2c8cc5]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  KernelAbstractions [63c18a36-062a-441e-b654-da1e3ab1ce7c]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  FluxCUDAExt [dd41ee52-2073-581e-92e8-26baf003f19a]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  ChainRulesCoreExt [eae2faf6-b232-58cb-a410-7764fda2830c]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesFillArraysExt [49ce8ddc-4db6-5c07-b688-b3e3c04eb6c4]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesChainRulesCoreExt [c98107f5-5745-53b5-a38a-33ea3b7c47c4]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  Flux [587475ba-b771-5e3f-ad9e-33799f191a9c]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlib [872c559c-99b0-510c-b3b7-b6c96a88d5cd]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  CUDA [052768ef-5323-5732-b1bb-66c8b64840ba]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  OneHotArrays [0b1bfda6-eb8a-41d2-88d8-f5af5cad476f]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLUtils [f1d291b0-491e-4a28-83b9-f70985020b54]\n\u001b[33m\u001b[1m└ \u001b[22m\u001b[39m\u001b[90m@ Pkg.API /usr/local/julia/share/julia/stdlib/v1.10/Pkg/src/API.jl:1239\u001b[39m\n\u001b[32m\u001b[1m   Resolving\u001b[22m\u001b[39m package versions...\n\u001b[32m\u001b[1m  No Changes\u001b[22m\u001b[39m to `~/.project/Project.toml`\n\u001b[32m\u001b[1m  No Changes\u001b[22m\u001b[39m to `~/.project/Manifest.toml`\n\u001b[33m\u001b[1m┌ \u001b[22m\u001b[39m\u001b[33m\u001b[1mWarning: \u001b[22m\u001b[39mCircular dependency detected. Precompilation will be skipped for:\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlibFFTWExt [96386cae-6b62-59ad-b532-a94eae05753e]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesCUDAExt [75b8c125-561c-596e-9db0-c79879254aa3]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  SparseArraysExt [85068d23-b5fb-53f1-8204-05c2aba6942f]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesRecursiveArrayToolsExt [c6a149b2-afdf-53b0-83bb-237b19d30693]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesGPUArraysExt [b7a43d79-68b1-555e-8052-5fba48570bb1]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  AtomixCUDAExt [13011619-4c7c-5ef0-948f-5fc81565cd05]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesZygoteExt [37b8f99f-6f97-57a3-b9f9-a4dd545e3a97]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlibForwardDiffExt [e8958739-db86-5f80-9e4c-f7c96aa15038]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  SpecialFunctionsExt [1285c0f1-ff9f-5867-b66e-0f359bcf09ba]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesSparseArraysExt [f6db14ba-fd63-5072-9bce-a2c470f90ca4]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesMLUtilsExt [ebee3dfe-b9aa-5535-b9a3-b63281c92313]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  LinearAlgebraExt [66d79d19-2cc4-5b0b-ac7a-b340256d1ecd]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlibCUDAExt [8a688d86-d2bc-5ad3-8ed1-384f9f2c8cc5]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  KernelAbstractions [63c18a36-062a-441e-b654-da1e3ab1ce7c]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  FluxCUDAExt [dd41ee52-2073-581e-92e8-26baf003f19a]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  ChainRulesCoreExt [eae2faf6-b232-58cb-a410-7764fda2830c]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesFillArraysExt [49ce8ddc-4db6-5c07-b688-b3e3c04eb6c4]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLDataDevicesChainRulesCoreExt [c98107f5-5745-53b5-a38a-33ea3b7c47c4]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  Flux [587475ba-b771-5e3f-ad9e-33799f191a9c]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  NNlib [872c559c-99b0-510c-b3b7-b6c96a88d5cd]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  CUDA [052768ef-5323-5732-b1bb-66c8b64840ba]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  OneHotArrays [0b1bfda6-eb8a-41d2-88d8-f5af5cad476f]\n\u001b[33m\u001b[1m│ \u001b[22m\u001b[39m  MLUtils [f1d291b0-491e-4a28-83b9-f70985020b54]\n\u001b[33m\u001b[1m└ \u001b[22m\u001b[39m\u001b[90m@ Pkg.API /usr/local/julia/share/julia/stdlib/v1.10/Pkg/src/API.jl:1239\u001b[39m\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 338.3999938964844
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "d43cb20b",
+      "cell_type": "code",
+      "source": [
+        "m = Model();\r\nset_optimizer(m, GLPK.Optimizer);\r\n@variable(m, x[1:length(variables)]);\r\nfor i in 1:length(x)\r\n    if integer_vars[i]\r\n        set_integer(x[i])\r\n    end\r\nend\r\nfor constraint in constraints\r\n    constr_left = sum([x[i] * constraint[i] for i in 1:length(x)]);\r\n    @constraint(m, constr_left <= constraint[length(x) + 1]);\r\nend\r\nobjective_expr = sum([x[i] * objective_vals[i] for i in 1:length(x)]);\r\nif objective_max\r\n    @objective(m, Max, objective_expr);\r\nelse\r\n    @objective(m, Min, objective_expr);\r\nend\r\nprint(m)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/latex": "$$ \\begin{aligned}\n\\max\\quad & 60 x_{1} + 32 x_{2}\\\\\n\\text{Subject to} \\quad & 15 x_{1} + 17 x_{2} \\leq 210\\\\\n & x_{1} - x_{2} \\leq 0\\\\\n & -x_{1} \\leq 0\\\\\n & -x_{2} \\leq 0\\\\\n & x_{1} \\in \\mathbb{Z}\\\\\n & x_{2} \\in \\mathbb{Z}\\\\\n\\end{aligned} $$"
+          },
+          "metadata": {}
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "e662f8b6",
+      "cell_type": "code",
+      "source": [
+        "optimize!(m);"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "6fd1da96",
+      "cell_type": "code",
+      "source": [
+        "println(objective_value(m)) # Значение целевой функции в оптимальной точке\r\nfor i in 1:length(variables)\r\n    println(\"$(variables[i]) = $(value.(x[i]))\")\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "584.0\nКоличество рикш = 6.0\nКоличество повозок с быками = 7.0\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    }
+  ]
+}
