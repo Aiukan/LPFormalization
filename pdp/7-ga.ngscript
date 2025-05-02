@@ -1,0 +1,625 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "IJulia 1.9.3",
+      "language": "julia",
+      "name": "ijulia-1.9"
+    },
+    "language_info": {
+      "file_extension": ".jl",
+      "name": "julia",
+      "version": "1.9.3"
+    },
+    "engee": {}
+  },
+  "cells": [
+    {
+      "id": "fed231fd",
+      "cell_type": "markdown",
+      "source": [
+        "# Пример решения задачи оптимизации портфеля через генетические алгоритмы в Julia\r\n\r\nГенетические алгоритмы (ГА) — эвристические методы оптимизации, имитирующие естественный отбор. Основные этапы:\r\n\r\n1. Генерация начальной популяции\r\n\r\n2. Расчет приспособленности особей\r\n\r\n3. Селекция лучших родителей\r\n\r\n4. Кроссовер и мутация\r\n\r\n5. Формирование нового поколения\r\n\r\nВ портфельной оптимизации:\r\n\r\n* Особи: векторы распределения капитала\r\n\r\n* Приспособленность: комбинация доходности и риска"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "72d78773",
+      "cell_type": "markdown",
+      "source": [
+        "# Постановка задачи\r\nИнвестор хочет распределить $10,000 между 3 активами:\r\n\r\n| Актив | Ожидаемая доходность | Риск (σ) | Минимальная доля | Максимальная доля |\r\n|-------|----------------------|----------|------------------|-------------------|\r\n| A     | 8%                   | 10%      | 10%              | 50%               |\r\n| B     | 12%                  | 15%      | 10%              | 50%               |\r\n| C     | 6%                   | 5%       | 10%              | 50%               |\r\n\r\nКовариационная матрица:\r\n- Cov(A,B) = 0.5%\r\n- Cov(A,C) = -0.2%\r\n- Cov(B,C) = 0.3%\r\n\r\nЦель: максимизация E - λVar, где \r\n- E = Ожидаемая доходность портфеля\r\n- Var = Дисперсия (риск) портфеля\r\n- λ = Коэффициент риск-доходность (λ=1.0 означает равный баланс между доходностью и риском)"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "25d8330d",
+      "cell_type": "code",
+      "source": [
+        "ASSETS = [:A, :B, :C]\r\nEXPECTED_RETURNS = [0.08, 0.12, 0.06]\r\nCOV_MATRIX = [\r\n    0.10^2   0.005   -0.002;\r\n    0.005    0.15^2   0.003;\r\n    -0.002   0.003    0.05^2\r\n]\r\nMIN_SHARE = 0.10\r\nMAX_SHARE = 0.50\r\nLAMBDA = 1.0  # Коэффициент риск-доходность\r\n\r\n# Параметры алгоритма\r\nPOPULATION_SIZE = 100\r\nGENERATIONS = 50\r\nMUTATION_RATE = 0.1\r\nTOURNAMENT_SIZE = 3\r\nMUTATION_STRENGTH = 0.05\r\nSEED = 42"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "42"
+          },
+          "metadata": {},
+          "execution_count": 83
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "94303cfd",
+      "cell_type": "markdown",
+      "source": [
+        "## Инициализация окружения\r\nПодключим необходимые пакеты:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "b12e0967",
+      "cell_type": "code",
+      "source": [
+        "# import Pkg\r\n# Pkg.add(\"Random\")"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "0f2be760",
+      "cell_type": "code",
+      "source": [
+        "using Random"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "b7588aa1",
+      "cell_type": "markdown",
+      "source": [
+        "# Генерация особи\r\nОсоби — нормализованные векторы, удовлетворяющие ограничениям. Алгоритм:\r\n\r\n1. Случайная генерация в [0,1]\r\n\r\n2. Нормализация суммы к 1\r\n\r\n3. Повтор, пока все доли в [10%, 50%]"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "f99c6faa",
+      "cell_type": "code",
+      "source": [
+        "function generate_individual()\r\n    while true\r\n        x = rand(3)\r\n        x /= sum(x)  # Нормализация суммы к 1\r\n        if all(MIN_SHARE .<= x .<= MAX_SHARE)\r\n            return x\r\n        end\r\n    end\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "generate_individual (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 86
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "f4f09ef9",
+      "cell_type": "markdown",
+      "source": [
+        "# Инициализация популяции\r\nПопуляция — массив из POPULATION_SIZE особей"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "c40405d6",
+      "cell_type": "code",
+      "source": [
+        "function generate_population(pop_size)\r\n    [generate_individual() for _ in 1:pop_size]\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "generate_population (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 87
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "e799a1ea",
+      "cell_type": "markdown",
+      "source": [
+        "# Функция приспособленности\r\nЦелевая функция: E - λVar, где:\r\n\r\n- E = Σ(ожидаемая доходность[i] * доля[i])\r\n\r\n- Var = ΣΣ(ковариация[i,j] * доля[i] * доля[j])"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "31a71511",
+      "cell_type": "code",
+      "source": [
+        "function fitness(x)\r\n    # Расчет ожидаемой доходности\r\n    E = sum(EXPECTED_RETURNS .* x)\r\n    \r\n    # Расчет дисперсии портфеля\r\n    Var = COV_MATRIX[1,1]*x[1]^2 +\r\n          COV_MATRIX[2,2]*x[2]^2 +\r\n          COV_MATRIX[3,3]*x[3]^2 +\r\n          2*COV_MATRIX[1,2]*x[1]*x[2] +\r\n          2*COV_MATRIX[1,3]*x[1]*x[3] +\r\n          2*COV_MATRIX[2,3]*x[2]*x[3]\r\n    \r\n    E - LAMBDA * Var  # Целевая функция для максимизации\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "fitness (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 88
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "57713152",
+      "cell_type": "markdown",
+      "source": [
+        "# Селекция родителей\r\nТурнирный отбор: случайный выбор TOURNAMENT_SIZE кандидатов, выбор лучшего"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "939e67f3",
+      "cell_type": "code",
+      "source": [
+        "function tournament_selection(population, fitnesses)\r\n    candidates = rand(1:POPULATION_SIZE, TOURNAMENT_SIZE)\r\n    best_idx = argmax(fitnesses[candidates])\r\n    population[candidates[best_idx]]\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "tournament_selection (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 89
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "538ba721",
+      "cell_type": "markdown",
+      "source": [
+        "# Кроссовер\r\nАрифметический кроссовер: линейная комбинация родителей.\r\nПри нарушении ограничений — генерация новой особи"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "898ea32a",
+      "cell_type": "code",
+      "source": [
+        "function crossover(p1, p2)\r\n    α = rand()  # Коэффициент смешивания\r\n    child = p1 .+ α.*(p2 .- p1)\r\n    child ./= sum(child)\r\n    all(MIN_SHARE .<= child .<= MAX_SHARE) ? child : generate_individual()\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "crossover (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 90
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "5e704310",
+      "cell_type": "markdown",
+      "source": [
+        "# Мутация\r\nГауссово возмущение с адаптацией. Мутированные гены фиксируются в [10%, 50%]"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "3d95ed5b",
+      "cell_type": "code",
+      "source": [
+        "function mutate(x)\r\n    mutated = copy(x)\r\n    for i in 1:3\r\n        if rand() < MUTATION_RATE\r\n            # Добавляем шум с нормальным распределением\r\n            mutated[i] = clamp(\r\n                mutated[i] + randn()*MUTATION_STRENGTH,\r\n                MIN_SHARE,\r\n                MAX_SHARE\r\n            )\r\n        end\r\n    end\r\n    mutated ./= sum(mutated)\r\n    all(MIN_SHARE .<= mutated .<= MAX_SHARE) ? mutated : x\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "mutate (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 91
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "a442f22f",
+      "cell_type": "markdown",
+      "source": [
+        "# Основной алгоритм\r\nЭтапы поколения:\r\n\r\n1. Расчет приспособленности\r\n\r\n2. Сохранение элиты\r\n\r\n3. Селекция, кроссовер и мутация для заполнения популяции"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "6ea7fa46",
+      "cell_type": "code",
+      "source": [
+        "function genetic_algorithm()\r\n    Random.seed!(SEED)\r\n    population = generate_population(POPULATION_SIZE)\r\n    best = (fitness=-Inf, individual=zeros(3))\r\n    \r\n    for gen in 1:GENERATIONS\r\n        # Расчет приспособленности\r\n        fitnesses = [fitness(ind) for ind in population]\r\n        best_idx = argmax(fitnesses)\r\n        \r\n        # Сохранение лучшей особи\r\n        if fitnesses[best_idx] > best.fitness\r\n            best = (fitness=fitnesses[best_idx], individual=population[best_idx])\r\n        end\r\n        \r\n        # Формирование нового поколения\r\n        new_pop = [population[best_idx]]  # Элитизм\r\n        \r\n        while length(new_pop) < POPULATION_SIZE\r\n            parent1 = tournament_selection(population, fitnesses)\r\n            parent2 = tournament_selection(population, fitnesses)\r\n            child = crossover(parent1, parent2)\r\n            push!(new_pop, mutate(child))\r\n        end\r\n        \r\n        population = new_pop[1:POPULATION_SIZE]\r\n    end\r\n    best\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "genetic_algorithm (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 92
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "cc7b083f",
+      "cell_type": "markdown",
+      "source": [
+        "# Результаты оптимизации\r\nЗапускаем основной алгоритм и выводим результаты"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "6839c377",
+      "cell_type": "code",
+      "source": [
+        "result = genetic_algorithm()\r\n\r\n# Расчет дополнительных метрик\r\nportfolio_return = sum(EXPECTED_RETURNS .* result.individual)\r\nportfolio_variance = let x = result.individual\r\n    COV_MATRIX[1,1]*x[1]^2 + COV_MATRIX[2,2]*x[2]^2 + COV_MATRIX[3,3]*x[3]^2 +\r\n    2*COV_MATRIX[1,2]*x[1]*x[2] + 2*COV_MATRIX[1,3]*x[1]*x[3] + 2*COV_MATRIX[2,3]*x[2]*x[3]\r\nend\r\n\r\nprintln(\"Оптимальное распределение:\")\r\nprintln(\"A: \", round(result.individual[1]*100, digits=2), \"%\")\r\nprintln(\"B: \", round(result.individual[2]*100, digits=2), \"%\")\r\nprintln(\"C: \", round(result.individual[3]*100, digits=2), \"%\")\r\n\r\nprintln(\"\\nМетрики портфеля:\")\r\nprintln(\"Ожидаемая доходность: \", round(portfolio_return, digits=4) * 100, \"%\")\r\nprintln(\"Дисперсия риска: \", round(portfolio_variance, digits=5))\r\nprintln(\"Значение целевой функции (E - λVar): \", round(result.fitness, digits=4))"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "Оптимальное распределение:\nA: 39.91%\nB: 50.0%\nC: 10.09%\n\nМетрики портфеля:\nОжидаемая доходность: 9.8%\nДисперсия риска: 0.00938\nЗначение целевой функции (E - λVar): 0.0886\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    }
+  ]
+}

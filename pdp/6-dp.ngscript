@@ -1,0 +1,608 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "IJulia 1.9.3",
+      "language": "julia",
+      "name": "ijulia-1.9"
+    },
+    "language_info": {
+      "file_extension": ".jl",
+      "name": "julia",
+      "version": "1.9.3"
+    },
+    "engee": {}
+  },
+  "cells": [
+    {
+      "id": "2f0761f0",
+      "cell_type": "markdown",
+      "source": [
+        "# Пример решения задачи оптимизации портфеля через динамическое программирование в Julia\r\n\r\nДинамическое программирование (ДП) — метод решения задач с оптимальной подструктурой через разбиение на подзадачи. Основная идея:\r\n\r\n* Принцип оптимальности Беллмана: оптимальное решение всей задачи содержит оптимальные решения подзадач\r\n\r\n* Мемоизация: сохранение результатов вычислений для повторного использования\r\n\r\nВ инвестиционной задаче:\r\n\r\n* Состояние: текущий капитал и распределение активов\r\n\r\n* Действие: ребалансировка портфеля\r\n\r\n* Награда: прирост капитала за период"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "a8358f23",
+      "cell_type": "markdown",
+      "source": [
+        "# Постановка задачи\r\nИнвестор хочет распределить $10,000 между 3 активами:\r\n\r\n| Актив | Ожидаемая доходность | Риск (σ) | Минимальная доля | Максимальная доля |\r\n|-------|----------------------|----------|------------------|-------------------|\r\n| A     | 8%                   | 10%      | 10%              | 50%               |\r\n| B     | 12%                  | 15%      | 10%              | 50%               |\r\n| C     | 6%                   | 5%       | 10%              | 50%               |\r\n\r\nКовариационная матрица:\r\n- Cov(A,B) = 0.5%\r\n- Cov(A,C) = -0.2%\r\n- Cov(B,C) = 0.3%\r\n\r\nОсобенности модели:\r\n\r\n* Риск активов растёт на 20% каждый период\r\n\r\n* Ребалансировка возможна с шагом 10%\r\n\r\n* Цель: максимизация общего капитала"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "6856795f",
+      "cell_type": "code",
+      "source": [
+        "INITIAL_CAPITAL = 10000.0\r\nASSETS = [:A, :B, :C]\r\nEXPECTED_RETURNS = [0.08, 0.12, 0.06]\r\nRISKS = [0.10, 0.15, 0.05]\r\nN_PERIODS = 3\r\nALLOCATION_OPTIONS = 0.1:0.1:0.5  # Шаг 10%\r\nMIN_SHARE = 0.10\r\nMAX_SHARE = 0.50\r\nRISK_GROWTH_RATE = 0.20  # Рост риска за период\r\nROUND_PRECISION = 3      # Точность округления долей"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "3"
+          },
+          "metadata": {},
+          "execution_count": 72
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "8ee9256a",
+      "cell_type": "markdown",
+      "source": [
+        "## Инициализация окружения\r\nПодключим необходимые пакеты:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "6b55a291",
+      "cell_type": "code",
+      "source": [
+        "# import Pkg\r\n# Pkg.add([\"Distributions\", \"Random\", \"LinearAlgebra\"])"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "67b0b9bd",
+      "cell_type": "code",
+      "source": [
+        "using Distributions, Random, LinearAlgebra"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 444.4444580078125
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "924a0629",
+      "cell_type": "markdown",
+      "source": [
+        "# Генерация доходностей\r\nМодель шоков с растущим риском. Для генерации используем многомерное нормальное распределение"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "7336d4e9",
+      "cell_type": "code",
+      "source": [
+        "function generate_returns(period)\r\n    shocks = rand(MvNormal(EXPECTED_RETURNS, diagm(RISKS)))\r\n    return shocks .* (1 + RISK_GROWTH_RATE * (period-1))  # Риск растёт со временем\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "generate_returns (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 75
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "71cd4ba7",
+      "cell_type": "markdown",
+      "source": [
+        "# Мемоизация\r\nСловарь для хранения уже вычисленных значений функции Беллмана. Ключ — кортеж (период, доли активов)"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "5142cdb3",
+      "cell_type": "code",
+      "source": [
+        "const memo = Dict{Tuple{Int, Float64, Float64, Float64}, Float64}()"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "WARNING: redefinition of constant Main.memo. This may fail, cause incorrect answers, or produce other errors.\n"
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "Dict{Tuple{Int64, Float64, Float64, Float64}, Float64}()"
+          },
+          "metadata": {},
+          "execution_count": 76
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "465db9f4",
+      "cell_type": "markdown",
+      "source": [
+        "# Функция Беллмана\r\nРекурсивная функция для вычисления максимального ожидаемого капитала. На каждом шаге:\r\n\r\n1. Проверяем терминальное условие\r\n\r\n2. Используем кэш при наличии\r\n\r\n3. Перебираем все допустимые ребалансировки\r\n\r\n4. Вычисляем текущий прирост и рекурсивно следующий период"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "b2d04609",
+      "cell_type": "code",
+      "source": [
+        "function bellman(period, xA, xB, xC)\r\n    # Нормировка и округление\r\n    xC = round(1 - xA - xB, digits=ROUND_PRECISION)\r\n    (xC < MIN_SHARE || xC > MAX_SHARE) && return -Inf\r\n    \r\n    # Терминальное условие\r\n    (period > N_PERIODS) && return 0.0\r\n    \r\n    # Проверка кэша\r\n    key = (period, xA, xB, xC)\r\n    haskey(memo, key) && return memo[key]\r\n    \r\n    # Генерация доходностей для периода\r\n    returns = generate_returns(period)\r\n    \r\n    max_value = -Inf\r\n    for new_xA in ALLOCATION_OPTIONS\r\n        (new_xA < MIN_SHARE || new_xA > MAX_SHARE) && continue\r\n        \r\n        for new_xB in ALLOCATION_OPTIONS\r\n            new_xC = round(1 - new_xA - new_xB, digits=ROUND_PRECISION)\r\n            (new_xC < MIN_SHARE || new_xC > MAX_SHARE) && continue\r\n            \r\n            # Расчет прироста капитала\r\n            growth = new_xA*returns[1] + new_xB*returns[2] + new_xC*returns[3]\r\n            current_value = (1 + growth) * INITIAL_CAPITAL\r\n            \r\n            # Рекурсивный вызов\r\n            future_value = bellman(period+1, new_xA, new_xB, new_xC)\r\n            total_value = current_value + future_value\r\n            \r\n            # Обновление максимума\r\n            max_value = max(max_value, total_value)\r\n        end\r\n    end\r\n    \r\n    memo[key] = max_value  # Сохраняем в кэш\r\n    return max_value\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "bellman (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 77
+        }
+      ],
+      "metadata": {
+        "name": " ",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "29b171a8",
+      "cell_type": "markdown",
+      "source": [
+        "# Оптимизация\r\nЗапуск вычислений с начальной точки. Для воспроизводимости фиксируем seed"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "66d7f76e",
+      "cell_type": "code",
+      "source": [
+        "Random.seed!(42)\r\noptimal_value = bellman(1, 0.3, 0.5, 0.2)  # Начальная стратегия"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "39890.61203656556"
+          },
+          "metadata": {},
+          "execution_count": 78
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "1c8f0200",
+      "cell_type": "markdown",
+      "source": [
+        "# Визуализация результатов\r\nИзвлекаем оптимальные стратегии из кэша. Для каждого периода показываем допустимые распределения"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "d10647d5",
+      "cell_type": "code",
+      "source": [
+        "println(\"Максимальный ожидаемый капитал: \\$\", round(optimal_value, digits=2))\r\nprintln(\"\\nОптимальные стратегии по периодам:\")\r\n\r\nfor period in 1:N_PERIODS\r\n    println(\"\\nЭтап $period:\")\r\n    for (key, value) in memo\r\n        key[1] == period || continue\r\n        println(\"  Доли: A=$(key[2]), B=$(key[3]), C=$(key[4]) → \", round(value, digits=2))\r\n    end\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "Максимальный ожидаемый капитал: $39890.61\n\nОптимальные стратегии по периодам:\n\nЭтап 1:\n  Доли: A=0.3, B=0.5, C=0.2 → 39890.61\n\nЭтап 2:\n  Доли: A=0.3, B=0.3, C=0.4 → 22927.59\n  Доли: A=0.1, B=0.5, C=0.4 → 21892.18\n  Доли: A=0.4, B=0.1, C=0.5 → 26756.93\n  Доли: A=0.1, B=0.4, C=0.5 → 24236.6\n  Доли: A=0.4, B=0.3, C=0.3 → 26463.4\n  Доли: A=0.4, B=0.4, C=0.2 → 27193.87\n  Доли: A=0.4, B=0.5, C=0.1 → 28790.92\n  Доли: A=0.5, B=0.3, C=0.2 → 27408.74\n  Доли: A=0.5, B=0.4, C=0.1 → 21051.43\n  Доли: A=0.2, B=0.5, C=0.3 → 28268.35\n  Доли: A=0.3, B=0.2, C=0.5 → 26400.81\n  Доли: A=0.2, B=0.4, C=0.4 → 26545.59\n  Доли: A=0.5, B=0.2, C=0.3 → 29091.81\n  Доли: A=0.4, B=0.2, C=0.4 → 22415.74\n  Доли: A=0.2, B=0.3, C=0.5 → 24893.27\n  Доли: A=0.3, B=0.4, C=0.3 → 28843.29\n  Доли: A=0.3, B=0.5, C=0.2 → 27077.92\n  Доли: A=0.5, B=0.1, C=0.4 → 26982.42\n\nЭтап 3:\n  Доли: A=0.5, B=0.4, C=0.1 → 12227.0\n  Доли: A=0.2, B=0.5, C=0.3 → 14524.8\n  Доли: A=0.3, B=0.2, C=0.5 → 13975.28\n  Доли: A=0.2, B=0.4, C=0.4 → 10845.37\n  Доли: A=0.5, B=0.2, C=0.3 → 12374.47\n  Доли: A=0.4, B=0.2, C=0.4 → 15120.2\n  Доли: A=0.2, B=0.3, C=0.5 → 13382.5\n  Доли: A=0.3, B=0.4, C=0.3 → 12513.98\n  Доли: A=0.3, B=0.5, C=0.2 → 12388.51\n  Доли: A=0.5, B=0.1, C=0.4 → 11402.38\n  Доли: A=0.3, B=0.3, C=0.4 → 12108.25\n  Доли: A=0.1, B=0.5, C=0.4 → 12535.23\n  Доли: A=0.4, B=0.1, C=0.5 → 11171.89\n  Доли: A=0.1, B=0.4, C=0.5 → 14421.63\n  Доли: A=0.4, B=0.3, C=0.3 → 14950.75\n  Доли: A=0.4, B=0.4, C=0.2 → 14242.78\n  Доли: A=0.4, B=0.5, C=0.1 → 13926.13\n  Доли: A=0.5, B=0.3, C=0.2 → 9764.97\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 171.55555725097656
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "f3e1506d",
+      "cell_type": "markdown",
+      "source": [
+        "# Анализ оптимального пути\r\nПоиск последовательности стратегий с максимальной общей стоимостью"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "ef0dcd08",
+      "cell_type": "code",
+      "source": [
+        "struct Strategy\r\n    period::Int\r\n    allocation::Tuple{Float64, Float64, Float64}\r\n    value::Float64\r\nend\r\n\r\n# Преобразование словаря в массив структур\r\nfunction parse_memo(memo_dict)\r\n    strategies = Strategy[]\r\n    for (key, val) in memo_dict\r\n        push!(strategies, Strategy(\r\n            key[1], \r\n            (key[2], key[3], key[4]), \r\n            val\r\n        ))\r\n    end\r\n    return strategies\r\nend\r\n\r\n# Фильтрация по периоду\r\nfunction filter_by_period(strategies, period)\r\n    filter(s -> s.period == period, strategies)\r\nend\r\n\r\n# Топ-N стратегий\r\nfunction top_strategies(strategies, n=5)\r\n    sort(strategies, by=s->s.value, rev=true)[1:min(n, length(strategies))]\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "top_strategies (generic function with 2 methods)"
+          },
+          "metadata": {},
+          "execution_count": 80
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "259b5419",
+      "cell_type": "code",
+      "source": [
+        "function trace_optimal_path(strategies)\r\n    n_periods = maximum(s.period for s in strategies)\r\n    path = Vector{Strategy}(undef, n_periods)\r\n    \r\n    # Начинаем с последнего периода\r\n    current = top_strategies(filter_by_period(strategies, n_periods), 1)[1]\r\n    path[end] = current\r\n    \r\n    # Идем в обратном порядке\r\n    for p in (n_periods-1):-1:1\r\n        prev_strategies = filter_by_period(strategies, p)\r\n        current = argmax(s -> s.value + current.value, prev_strategies)\r\n        path[p] = current\r\n    end\r\n    \r\n    return path\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "trace_optimal_path (generic function with 1 method)"
+          },
+          "metadata": {},
+          "execution_count": 81
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "970277ff",
+      "cell_type": "code",
+      "source": [
+        "strategies = parse_memo(memo)\r\noptimal_path = trace_optimal_path(strategies)\r\n\r\n# Вывод результатов\r\nprintln(\"\\nОптимальная последовательность стратегий:\")\r\nfor (i, s) in enumerate(optimal_path)\r\n    println(\"Период $i: \", \r\n            \"A=$(s.allocation[1]), \",\r\n            \"B=$(s.allocation[2]), \",\r\n            \"C=$(s.allocation[3]) → \",\r\n            \"Капитал: \\$\", round(s.value, digits=2))\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "\nОптимальная последовательность стратегий:\nПериод 1: A=0.3, B=0.5, C=0.2 → Капитал: $39890.61\nПериод 2: A=0.5, B=0.2, C=0.3 → Капитал: $29091.81\nПериод 3: A=0.4, B=0.2, C=0.4 → Капитал: $15120.2\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "d0adc02f",
+      "cell_type": "markdown",
+      "source": [
+        "# Интерпретация графика и вывода\r\nКлючевые выводы:\r\n\r\n1. На ранних этапах преобладают агрессивные стратегии (высокая доля актива B)\r\n\r\n2. К 2-му периоду происходит перераспределение в консервативные активы (A и C)\r\n\r\n3. Оптимальный путь демонстрирует постепенное снижение риска:\r\n\r\n* Период 1: 30% A, 50% B, 20% C\r\n\r\n* Период 2: 50% A, 20% B, 30% C\r\n\r\n* Период 3: 40% A, 20% B, 40% C"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    }
+  ]
+}

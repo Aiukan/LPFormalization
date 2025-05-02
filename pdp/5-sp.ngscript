@@ -1,0 +1,629 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "IJulia 1.9.3",
+      "language": "julia",
+      "name": "ijulia-1.9"
+    },
+    "language_info": {
+      "file_extension": ".jl",
+      "name": "julia",
+      "version": "1.9.3"
+    },
+    "engee": {}
+  },
+  "cells": [
+    {
+      "id": "e8868512",
+      "cell_type": "markdown",
+      "source": [
+        "# Пример решения задачи оптимизации портфеля через стохастическое программирование в Julia\r\n\r\nСтохастическое программирование — подход к оптимизации с учетом неопределенности в данных. Основная идея:\r\n\r\n- Параметры модели представляются случайными величинами\r\n\r\n- Используется генерация сценариев для аппроксимации распределений\r\n\r\n- Целевая функция включает риск-метрики (CVaR, VaR)\r\n\r\nВ портфельной оптимизации:\r\n\r\n- Цель: баланс между доходностью и риском\r\n\r\n- Особенность: учет экстремальных сценариев через CVaR"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "0f80d4a3",
+      "cell_type": "markdown",
+      "source": [
+        "# Постановка задачи\r\nИнвестор хочет распределить $10,000 между 3 активами:\r\n\r\n| Актив | Ожидаемая доходность | Риск (σ) | Минимальная доля | Максимальная доля |\r\n|-------|----------------------|----------|------------------|-------------------|\r\n| A     | 8%                   | 10%      | 10%              | 50%               |\r\n| B     | 12%                  | 15%      | 10%              | 50%               |\r\n| C     | 6%                   | 5%       | 10%              | 50%               |\r\n\r\nКовариационная матрица:\r\n- Cov(A,B) = 0.5%\r\n- Cov(A,C) = -0.2%\r\n- Cov(B,C) = 0.3%\r\n\r\nОсобенности задачи:\r\n\r\n* Генерация 100 сценариев доходности методом Монте-Карло\r\n\r\n* Комбинированная цель: максимизация ожидаемой доходности - 5%*CVaR"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "4c59fa33",
+      "cell_type": "code",
+      "source": [
+        "ASSETS = [:A, :B, :C]\r\nEXPECTED_RETURNS = [0.08, 0.12, 0.06]\r\nRISKS = [0.10, 0.15, 0.05]\r\nCOV_MATRIX = [\r\n    0.10^2   0.005   -0.002\r\n    0.005    0.15^2   0.003\r\n    -0.002   0.003    0.05^2\r\n]\r\nMIN_SHARE = 0.10\r\nMAX_SHARE = 0.50\r\nN_SCENARIOS = 100\r\nCVAR_ALPHA = 0.95  # Уровень доверия для VaR\r\nCVAR_BETA = 1 - CVAR_ALPHA   # Вес CVaR в целевой функции"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "0.050000000000000044"
+          },
+          "metadata": {},
+          "execution_count": 46
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "12fc1042",
+      "cell_type": "markdown",
+      "source": [
+        "# Инициализация окружения\r\nПодключим необходимые пакеты:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "6c0f250c",
+      "cell_type": "code",
+      "source": [
+        "# import Pkg\r\n# Pkg.add([\"JuMP\", \"Ipopt\", \"Distributions\", \"Random\"])"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "8bd45cac",
+      "cell_type": "code",
+      "source": [
+        "using JuMP, Ipopt, Distributions, Random"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "25127641",
+      "cell_type": "markdown",
+      "source": [
+        "# Генерация сценариев\r\nИспользуем многомерное нормальное распределение для моделирования доходностей"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "6eb6c948",
+      "cell_type": "code",
+      "source": [
+        "Random.seed!(42)  # Фиксируем seed для воспроизводимости\r\n\r\n# Создание распределения и генерация данных\r\nmvnormal = MvNormal(EXPECTED_RETURNS, COV_MATRIX)\r\nreturns_scenarios = rand(mvnormal, N_SCENARIOS)';"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "8aa51bba",
+      "cell_type": "markdown",
+      "source": [
+        "# Инициализация модели\r\nСоздаем модель с нелинейным решателем Ipopt"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "5a361eaf",
+      "cell_type": "code",
+      "source": [
+        "model = Model(Ipopt.Optimizer)\r\nset_optimizer_attribute(model, \"print_level\", 0)  # Уменьшаем вывод логов"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "e96610f4",
+      "cell_type": "markdown",
+      "source": [
+        "# Переменные решения\r\nЦелочисленные переменные для каждого актива с явными границами"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "4b51865f",
+      "cell_type": "code",
+      "source": [
+        "@variable(model, MIN_SHARE <= x[1:3] <= MAX_SHARE)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "3-element Vector{VariableRef}:\n x[1]\n x[2]\n x[3]"
+          },
+          "metadata": {},
+          "execution_count": 51
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "25e33577",
+      "cell_type": "markdown",
+      "source": [
+        "# Базовые ограничения\r\nПолное инвестирование капитала"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "8a1a9e18",
+      "cell_type": "code",
+      "source": [
+        "@constraint(model, sum(x) == 1)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "x[1] + x[2] + x[3] = 1",
+            "text/latex": "$$ x_{1} + x_{2} + x_{3} = 1 $$"
+          },
+          "metadata": {},
+          "execution_count": 52
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "e2d672ec",
+      "cell_type": "markdown",
+      "source": [
+        "# Параметры CVaR\r\nВводим вспомогательные переменные для расчета Conditional Value-at-Risk"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "ada2433c",
+      "cell_type": "code",
+      "source": [
+        "@variable(model, VaR)\r\n@variable(model, Z[1:N_SCENARIOS] >= 0);"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "ee488d26",
+      "cell_type": "markdown",
+      "source": [
+        "# Ограничения для CVaR\r\nФормализуем условия для расчета ожидаемых потерь"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "2c8f964e",
+      "cell_type": "code",
+      "source": [
+        "@constraint(model, [i=1:N_SCENARIOS],\r\n    Z[i] >= VaR - sum(x[j] * returns_scenarios[i, j] for j in 1:3)\r\n);"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 163.55555725097656
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "8e6bf431",
+      "cell_type": "markdown",
+      "source": [
+        "# Целевая функция\r\nКомбинируем ожидаемую доходность и риск через CVaR"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "8e814b37",
+      "cell_type": "code",
+      "source": [
+        "@objective(model, Max, \r\n    sum(mean(returns_scenarios[:, j]) * x[j] for j in 1:3) -\r\n    CVAR_BETA * (VaR - (1/(1-CVAR_ALPHA)) * sum(Z))/N_SCENARIOS\r\n);"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "679d9d11",
+      "cell_type": "markdown",
+      "source": [
+        "# Решение задачи\r\nЗапуск оптимизации и проверка корректности решения"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "4b1e257b",
+      "cell_type": "code",
+      "source": [
+        "optimize!(model)"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "9d547a62",
+      "cell_type": "markdown",
+      "source": [
+        "# Результаты оптимизации\r\nВыводим оптимальные доли и ключевые метрики"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "28214a09",
+      "cell_type": "code",
+      "source": [
+        "println(\"Оптимальные доли:\")\r\nfor (i, asset) in enumerate(ASSETS)\r\n    println(\"$asset: \", round(value(x[i])*100, digits=2), \"%\")\r\nend\r\n\r\nportfolio_return = sum(value(x[i]) * EXPECTED_RETURNS[i] for i in 1:3)\r\nportfolio_cvar = value(VaR) - (sum(value.(Z))/N_SCENARIOS)/(1-CVAR_ALPHA)\r\n\r\nprintln(\"\\nКлючевые метрики:\")\r\nprintln(\"Ожидаемая доходность: \", round(portfolio_return*100, digits=2), \"%\")"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "Оптимальные доли:\nA: 38.82%\nB: 49.84%\nC: 11.34%\n\nКлючевые метрики:\nОжидаемая доходность: 9.77%\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    }
+  ]
+}

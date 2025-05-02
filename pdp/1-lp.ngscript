@@ -1,0 +1,510 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "IJulia 1.9.3",
+      "language": "julia",
+      "name": "ijulia-1.9"
+    },
+    "language_info": {
+      "file_extension": ".jl",
+      "name": "julia",
+      "version": "1.9.3"
+    },
+    "engee": {}
+  },
+  "cells": [
+    {
+      "id": "6d87ea9e",
+      "cell_type": "markdown",
+      "source": [
+        "# Пример решения задачи оптимизации портфеля через линейное программирование в Julia\r\n"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "4622b9fd",
+      "cell_type": "markdown",
+      "source": [
+        "# Постановка задачи\r\nИнвестор хочет распределить $10,000 между 3 активами:\r\n\r\n| Актив | Ожидаемая доходность | Риск (σ) | Минимальная доля | Максимальная доля |\r\n|-------|----------------------|----------|------------------|-------------------|\r\n| A     | 8%                   | 10%      | 10%              | 50%               |\r\n| B     | 12%                  | 15%      | 10%              | 50%               |\r\n| C     | 6%                   | 5%       | 10%              | 50%               |\r\n\r\nКовариационная матрица:\r\n- Cov(A,B) = 0.5%\r\n- Cov(A,C) = -0.2%\r\n- Cov(B,C) = 0.3%\r\n\r\nДля задачи ЛП, ковариационная матрица и риск игнорируются."
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "3a34c59b",
+      "cell_type": "code",
+      "source": [
+        "MIN_SHARE = 0.1         # Минимальная доля актива\r\nMAX_SHARE = 0.5         # Максимальная доля актива\r\nRETURNS = [0.08, 0.12, 0.06]  # Доходности активов A, B, C"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[36m\u001b[1m[ \u001b[22m\u001b[39m\u001b[36m\u001b[1mInfo: \u001b[22m\u001b[39mStarting sender/receiver loops\n"
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "3-element Vector{Float64}:\n 0.08\n 0.12\n 0.06"
+          },
+          "metadata": {},
+          "execution_count": 1
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "3b71334d",
+      "cell_type": "markdown",
+      "source": [
+        "# Инициализация окружения\r\nПодключим необходимые пакеты:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "d56ea79e",
+      "cell_type": "code",
+      "source": [
+        "# Установка пакетов (раскомментировать при первом запуске)\r\n# import Pkg\r\n# Pkg.add(\"JuMP\")\r\n# Pkg.add(\"GLPK\")"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "af09d4e0",
+      "cell_type": "code",
+      "source": [
+        "using JuMP, GLPK;"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 444.4444580078125
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "56d29632",
+      "cell_type": "markdown",
+      "source": [
+        "# Создание модели\r\nИнициализируем модель с решателе GLPK:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "35e14c45",
+      "cell_type": "code",
+      "source": [
+        "model = Model(GLPK.Optimizer)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "A JuMP Model\n├ solver: GLPK\n├ objective_sense: FEASIBILITY_SENSE\n├ num_variables: 0\n├ num_constraints: 0\n└ Names registered in the model: none"
+          },
+          "metadata": {},
+          "execution_count": 4
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "bd38aba2",
+      "cell_type": "markdown",
+      "source": [
+        "# Определение переменных\r\nДоли инвестиций в каждый актив (с ограничениями):"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "3558b3ec",
+      "cell_type": "code",
+      "source": [
+        "@variable(model, MIN_SHARE <= x_A <= MAX_SHARE)  # Доля актива A\r\n@variable(model, MIN_SHARE <= x_B <= MAX_SHARE)  # Доля актива B\r\n@variable(model, MIN_SHARE <= x_C <= MAX_SHARE)  # Доля актива C"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "x_C",
+            "text/latex": "$ x\\_C $"
+          },
+          "metadata": {},
+          "execution_count": 5
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "d3cc80c1",
+      "cell_type": "markdown",
+      "source": [
+        "# Добавление ограничений\r\nГлавное условие: полное распределение капитала"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "4c762c8c",
+      "cell_type": "code",
+      "source": [
+        "@constraint(model, sum_constraint, x_A + x_B + x_C == 1)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "sum_constraint : x_A + x_B + x_C = 1",
+            "text/latex": "$$ x\\_A + x\\_B + x\\_C = 1 $$"
+          },
+          "metadata": {},
+          "execution_count": 6
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "3c48fd25",
+      "cell_type": "markdown",
+      "source": [
+        "# Определение целевой функции\r\nМаксимизация ожидаемой доходности:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "590eb2f8",
+      "cell_type": "code",
+      "source": [
+        "@objective(model, Max, RETURNS[1]*x_A + RETURNS[2]*x_B + RETURNS[3]*x_C)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "0.08 x_A + 0.12 x_B + 0.06 x_C",
+            "text/latex": "$ 0.08 x\\_A + 0.12 x\\_B + 0.06 x\\_C $"
+          },
+          "metadata": {},
+          "execution_count": 7
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "2e75ab6d",
+      "cell_type": "markdown",
+      "source": [
+        "# Решение задачи\r\nЗапуск оптимизации:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "66796610",
+      "cell_type": "code",
+      "source": [
+        "optimize!(model)"
+      ],
+      "execution_count": 0,
+      "outputs": [],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "dc8a9ec1",
+      "cell_type": "markdown",
+      "source": [
+        "# Результаты оптимизации\r\nВыведем оптимальное распределение:"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "e8160007",
+      "cell_type": "code",
+      "source": [
+        "println(\"Оптимальные доли:\")\r\nprintln(\"A: \", round(value(x_A), digits=3))\r\nprintln(\"B: \", round(value(x_B), digits=3))\r\nprintln(\"C: \", round(value(x_C), digits=3))\r\nprintln(\"\\nОжидаемая доходность портфеля: \", round(objective_value(model)*100, digits=2), \"%\")"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "Оптимальные доли:\nA: 0.4\nB: 0.5\nC: 0.1\n\nОжидаемая доходность портфеля: 9.8%\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    }
+  ]
+}
