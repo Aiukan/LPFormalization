@@ -1,0 +1,434 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 5,
+  "metadata": {
+    "kernelspec": {
+      "display_name": "IJulia 1.9.3",
+      "language": "julia",
+      "name": "ijulia-1.9"
+    },
+    "language_info": {
+      "file_extension": ".jl",
+      "name": "julia",
+      "version": "1.9.3"
+    },
+    "engee": {}
+  },
+  "cells": [
+    {
+      "id": "02f37838",
+      "cell_type": "markdown",
+      "source": [
+        "# Автоматическая формализация задач ЛП\r\n\r\nДля решения задачи, необходимо:\r\n1. Получить токен авторизации API LLM и занести его в lp.env, в GIGACHAT_BASIC_TOKEN;\r\n2. Внести задачу для решения в data/problem.txt;\r\n3. Запустить этот скрипт."
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "819579af",
+      "cell_type": "markdown",
+      "source": [
+        "## Импорты и загрузка модулей"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "61c51d38",
+      "cell_type": "code",
+      "source": [
+        "import Pkg;\r\nPkg.add([\"DotEnv\", \"Logging\", \"HTTP\", \"JSON\", \"UUIDs\", \"JuMP\", \"GLPK\", \"ConfigEnv\", \"MathOptInterface\"]);"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[32m\u001b[1m   Resolving\u001b[22m\u001b[39m package versions...\nfatal: error thrown and no exception handler available.\nInitError(mod=:FFTW_jll, error=ErrorException(\"Artifact \"FFTW\" was not found by looking in the paths:\n  ~/.julia/artifacts/fb9c131c2482480bc4019382138c55c7efb03741\n  /usr/local/julia/local/share/julia/artifacts/fb9c131c2482480bc4019382138c55c7efb03741\n  /usr/local/julia/share/julia/artifacts/fb9c131c2482480bc4019382138c55c7efb03741\nTry `using Pkg; Pkg.instantiate()` to re-install all missing resources if the artifact is part of a package or call `Pkg.ensure_artifact_installed` (https://pkgdocs.julialang.org/v1/api/#Pkg.Artifacts.ensure_artifact_installed) if not.\"))\nerror at ./error.jl:35\n_artifact_str at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/usr/share/julia/stdlib/v1.10/Artifacts/src/Artifacts.jl:575\njfptr__artifact_str_156403 at /usr/local/julia/lib/julia/sys.so (unknown line)\n_jl_invoke at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:2895 [inlined]\nijl_apply_generic at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:3077\njl_apply at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/julia.h:1982 [inlined]\njl_f__call_latest at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/builtins.c:812\n#invokelatest#2 at ./essentials.jl:892 [inlined]\ninvokelatest at ./essentials.jl:889 [inlined]\nmacro expansion at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/usr/share/julia/stdlib/v1.10/Artifacts/src/Artifacts.jl:704 [inlined]\nfind_artifact_dir at /usr/local/ijulia-core/packages/JLLWrappers/GfYNv/src/wrapper_generators.jl:17 [inlined]\n__init__ at /usr/local/ijulia-core/packages/FFTW_jll/KzAqR/src/wrappers/x86_64-linux-gnu.jl:8\njfptr___init___176465 at /usr/local/julia/lib/julia/sys.so (unknown line)\n_jl_invoke at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:2895 [inlined]\nijl_apply_generic at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:3077\njl_apply at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/julia.h:1982 [inlined]\njl_module_run_initializer at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/toplevel.c:76\n_finish_julia_init at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/init.c:901\njulia_init at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/init.c:844\njl_repl_entrypoint at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/jlapi.c:725\nmain at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/cli/loader_exe.c:58\nunknown function (ip: 0x7fdfc4e7ad8f)\n__libc_start_main at /lib/x86_64-linux-gnu/libc.so.6 (unknown line)\nunknown function (ip: 0x4010b8)\n\u001b[32m\u001b[1m    Updating\u001b[22m\u001b[39m `~/.project/Project.toml`\n  \u001b[90m[b8f27783] \u001b[39m\u001b[92m+ MathOptInterface v1.38.0\u001b[39m\n\u001b[32m\u001b[1m  No Changes\u001b[22m\u001b[39m to `~/.project/Manifest.toml`\nfatal: error thrown and no exception handler available.\nInitError(mod=:FFTW_jll, error=ErrorException(\"Artifact \"FFTW\" was not found by looking in the paths:\n  ~/.julia/artifacts/fb9c131c2482480bc4019382138c55c7efb03741\n  /usr/local/julia/local/share/julia/artifacts/fb9c131c2482480bc4019382138c55c7efb03741\n  /usr/local/julia/share/julia/artifacts/fb9c131c2482480bc4019382138c55c7efb03741\nTry `using Pkg; Pkg.instantiate()` to re-install all missing resources if the artifact is part of a package or call `Pkg.ensure_artifact_installed` (https://pkgdocs.julialang.org/v1/api/#Pkg.Artifacts.ensure_artifact_installed) if not.\"))\nerror at ./error.jl:35\n_artifact_str at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/usr/share/julia/stdlib/v1.10/Artifacts/src/Artifacts.jl:575\njfptr__artifact_str_156403 at /usr/local/julia/lib/julia/sys.so (unknown line)\n_jl_invoke at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:2895 [inlined]\nijl_apply_generic at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:3077\njl_apply at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/julia.h:1982 [inlined]\njl_f__call_latest at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/builtins.c:812\n#invokelatest#2 at ./essentials.jl:892 [inlined]\ninvokelatest at ./essentials.jl:889 [inlined]\nmacro expansion at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/usr/share/julia/stdlib/v1.10/Artifacts/src/Artifacts.jl:704 [inlined]\nfind_artifact_dir at /usr/local/ijulia-core/packages/JLLWrappers/GfYNv/src/wrapper_generators.jl:17 [inlined]\n__init__ at /usr/local/ijulia-core/packages/FFTW_jll/KzAqR/src/wrappers/x86_64-linux-gnu.jl:8\njfptr___init___176465 at /usr/local/julia/lib/julia/sys.so (unknown line)\n_jl_invoke at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:2895 [inlined]\nijl_apply_generic at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/gf.c:3077\njl_apply at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/julia.h:1982 [inlined]\njl_module_run_initializer at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/toplevel.c:76\n_finish_julia_init at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/init.c:901\njulia_init at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/init.c:844\njl_repl_entrypoint at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/src/jlapi.c:725\nmain at /cache/build/builder-amdci4-0/julialang/julia-release-1-dot-10/cli/loader_exe.c:58\nunknown function (ip: 0x7fac43ee7d8f)\n__libc_start_main at /lib/x86_64-linux-gnu/libc.so.6 (unknown line)\nunknown function (ip: 0x4010b8)\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 535.111083984375
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "f4df9c42",
+      "cell_type": "code",
+      "source": [
+        "using ConfigEnv\r\nusing Logging\r\ninclude(\"./src/GigaChatAuth.jl\")\r\ninclude(\"./src/LPGenerator.jl\")\r\ninclude(\"./src/IOUtils.jl\")\r\ninclude(\"./src/LPSolver.jl\")\r\n\r\nConfigEnv.dotenv(\"lp.env\"; overwrite=false);\r\nMODELS = [\"GigaChat\", \"GigaChat-Pro\", \"GigaChat-Max\"]"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "WARNING: replacing module GigaChatAuth.\nWARNING: replacing module LPGenerator.\nWARNING: replacing module IOUtils.\nWARNING: replacing module LPSolver.\n"
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "3-element Vector{String}:\n \"GigaChat\"\n \"GigaChat-Pro\"\n \"GigaChat-Max\""
+          },
+          "metadata": {},
+          "execution_count": 34
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 369.77777099609375
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "0d00984f",
+      "cell_type": "markdown",
+      "source": [
+        "## Чтение задачи и шаблона"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "ca85ca26",
+      "cell_type": "code",
+      "source": [
+        "base_prompt = IOUtils.read_file(\"./data/base_prompt.txt\")\r\nproblem_text = IOUtils.read_file(\"./data/problem.txt\")"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[36m\u001b[1m[ \u001b[22m\u001b[39m\u001b[36m\u001b[1mInfo: \u001b[22m\u001b[39mЧтение файла: $(path)\n\u001b[36m\u001b[1m[ \u001b[22m\u001b[39m\u001b[36m\u001b[1mInfo: \u001b[22m\u001b[39mЧтение файла: $(path)\n"
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "\"Пекарня продает два вида тортов. Они продают шоколадный торт и ванильный торт. Пусть они делают x1 шоколадных тортов с прибылью в \\$10 каждый, и x2 ванильных тортов с прибылью \\$11 каждый (x1 и x2 это неизвестные и оба больше или равны 0). Ежедневный спрос на эти торты составляет максимум 50 шоколадных тортов  и максимум 30 ванильных тортов. В пекарне не хватает работников, поэтому в пекарне могут сделать максимум 50 тортов любого вида за день. Сколько тортов каждого вида необходимо делать пекарне, чтобы максимизировать их прибыль?\""
+          },
+          "metadata": {},
+          "execution_count": 3
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "e3309166",
+      "cell_type": "markdown",
+      "source": [
+        "## Получение токена авторизации"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "58c7a062",
+      "cell_type": "code",
+      "source": [
+        "token = GigaChatAuth.get_access_token(\r\n    oauth_url=ENV[\"GIGACHAT_OAUTH_URL\"],\r\n    basic_token=ENV[\"GIGACHAT_BASIC_TOKEN\"]\r\n)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[36m\u001b[1m[ \u001b[22m\u001b[39m\u001b[36m\u001b[1mInfo: \u001b[22m\u001b[39mЗапрашивается OAuth токен от $(oauth_url)\n"
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "\"eyJjdHkiOiJqd3QiLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiYWxnIjoiUlNBLU9BRVAtMjU2In0.ulsvpkguRCrP2cWeo9pebzgZGVaV8honmk0MT8NdnM6uNbeMmoOY6Zz8afNrLjJSoI7t95BTL0kQrHU-DAGE543aaludvOthhvhSh8ft_Azr1x-D_zOsse3csODdPe1a52DwByGUwuUjyQb2KuJBuCvyMHdvyoh_uHjGhBzd3aH3_-tUP3PuCN4W-UYeaJbGYGJ\"\u001b[93m\u001b[1m ⋯ 692 bytes ⋯ \u001b[22m\u001b[39m\"Ec85H1yykhpFpWFnlqsF4nDZWuIn_DmqjiVKGL3Yr_4aEnSkorp5YEQ9x-fHbDqjYzvRYk1D46bn9njYr_78hwHrhbYTtR60QWTr_eZNaG7L9JztuoSqGSwv5u_qBOZcmunGR_XoJ6hI15cXGRbfRlHm4JYbj7s8wReYd4t8PYYotphiQEjXZztVakVW_Ji4ayDwVqUxXjnxUqNtJN7qqdNXROC3akpbxs.xt-L-lwWKa-DC0VypQHgtmOfjKFGUMjgq6nCWVWLhVA\""
+          },
+          "metadata": {},
+          "execution_count": 29
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 1333.3333740234375
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "13ab7cb1",
+      "cell_type": "markdown",
+      "source": [
+        "## Генерация задачи линейного программирования"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "d039784d",
+      "cell_type": "code",
+      "source": [
+        "lp_str = LPGenerator.generate_lp(\r\n    problem_text=problem_text, base_prompt=base_prompt,\r\n    api_url=ENV[\"GIGACHAT_API_URL\"], access_token=token,\r\n    model=MODELS[1])\r\nprintln(\"Сформулированная модель ЛП:\")\r\nprintln(lp_str)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[36m\u001b[1m[ \u001b[22m\u001b[39m\u001b[36m\u001b[1mInfo: \u001b[22m\u001b[39mГенерация ЛП через API GigaChat...\n"
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "Сформулированная модель ЛП:\n[x1, x2] [Real, Real] [10, 11, Maximize] [1, 0, <=, 50] [0, 1, <=, 30] [1, 1, <=, 50]\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "b4f9fe15",
+      "cell_type": "markdown",
+      "source": [
+        "# Решение задачи линейного программирования"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "04af8e05",
+      "cell_type": "code",
+      "source": [
+        "solution = LPSolver.solve_lp_string(lp_str)"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": "\u001b[36m\u001b[1m[ \u001b[22m\u001b[39m\u001b[36m\u001b[1mInfo: \u001b[22m\u001b[39mПарсинг и решение LP из строки...\n"
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": "Dict{String, Any} with 2 entries:\n  \"variables\"       => Dict{SubString{String}, Float64}(\"x1\"=>20.0, \"x2\"=>30.0)\n  \"objective_value\" => 530.0"
+          },
+          "metadata": {},
+          "execution_count": 35
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "24d3eecb",
+      "cell_type": "markdown",
+      "source": [
+        "# Вывод решения"
+      ],
+      "attachments": {},
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": true,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false
+        }
+      }
+    },
+    {
+      "id": "01ae9ef6",
+      "cell_type": "code",
+      "source": [
+        "println(\"Решение задачи:\")\r\nprintln(\"Целевая функция = \", solution[\"objective_value\"])\r\nfor (var, val) in solution[\"variables\"]\r\n    println(\"$var = $val\")\r\nend"
+      ],
+      "execution_count": 0,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": "Решение задачи:\nЦелевая функция = 530.0\nx1 = 20.0\nx2 = 30.0\n"
+        }
+      ],
+      "metadata": {
+        "name": "Название секции",
+        "engee": {
+          "isDisplay": true,
+          "isParagraph": false,
+          "isClosedParagraph": false,
+          "amountHideCellsInside": 0,
+          "codeOutputView": "col",
+          "codeOutputHidden": false,
+          "outputInfo": {
+            "isExpanded": false,
+            "scrollTop": 0
+          },
+          "maskInfo": {
+            "isMaskVisible": true,
+            "isEditorVisible": true,
+            "isAutoplayActive": false
+          }
+        }
+      }
+    }
+  ]
+}
